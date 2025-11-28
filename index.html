@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+        }
+        
+        .player-info {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .player-name {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .player-score {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .black .player-name { color: #2c3e50; }
+        .white .player-name { color: #7f8c8d; }
+        
+        .board-container {
+            position: relative;
+            margin: 20px 0;
+            background: #dcb35c;
+            border: 2px solid #8b4513;
+            border-radius: 5px;
+            overflow: visible;
+            touch-action: manipulation;
+            padding: 15px;
+        }
+        
+        .board {
+            width: 100%;
+            aspect-ratio: 1;
+            position: relative;
+            background: #dcb35c;
+        }
+        
+        .board-line {
+            position: absolute;
+            background: #000;
+            z-index: 1;
+        }
+        
+        .horizontal-line {
+            width: 100%;
+            height: 1px;
+            left: 0;
+        }
+        
+        .vertical-line {
+            width: 1px;
+            height: 100%;
+            top: 0;
+        }
+        
+        .intersection {
+            position: absolute;
+            width: 11%;
+            height: 11%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+        
+        .stone {
+            width: 28px;  /* УВЕЛИЧЕНО с 22px до 28px */
+            height: 28px; /* УВЕЛИЧЕНО с 22px до 28px */
+            border-radius: 50%;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            z-index: 20;
+        }
+        
+        .black-stone {
+            background: radial-gradient(circle at 30% 30%, #666, #000);
+        }
+        
+        .white-stone {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+            border: 1px solid #999;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .pass-btn {
+            background: #3498db;
+            color: white;
+        }
+        
+        .undo-btn {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .new-game-btn {
+            background: #2ecc71;
+            color: white;
+            grid-column: 1 / -1;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .status {
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .current-turn {
+            border: 3px solid #f39c12;
+            padding: 8px;
+            border-radius: 12px;
+        }
+
+        .error {
+            color: #e74c3c;
+            background: #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 Игра Го</h1>
+            <div class="status" id="status">Ход чёрных</div>
+        </div>
+        
+        <div class="game-info">
+            <div class="player-info black current-turn" id="black-info">
+                <div class="player-name">Чёрные (B)</div>
+                <div class="player-score">Пленные: <span id="black-captures">0</span></div>
+            </div>
+            <div class="player-info white" id="white-info">
+                <div class="player-name">Белые (W)</div>
+                <div class="player-score">Пленные: <span id="white-captures">0</span></div>
+            </div>
+        </div>
+        
+        <div class="board-container">
+            <div class="board" id="board"></div>
+        </div>
+        
+        <div class="controls">
+            <button class="pass-btn" onclick="passTurn()">Пас</button>
+            <button class="undo-btn" onclick="undoMove()">Отменить ход</button>
+            <button class="new-game-btn" onclick="newGame()">Новая игра</button>
+        </div>
+    </div>
+
+    <script>
+        // ОБНОВЛЕННЫЕ СТРУКТУРЫ ПО ТВОЕМУ КОДУ
+        const PointColor = {
+            EMPTY: '.',
+            BLACK: 'B', 
+            WHITE: 'W'
+        };
+
+        const GameRules = {
+            JAPANESE: 0,
+            CHINESE: 1
+        };
+
+        class GameSettings {
+            constructor() {
+                this.BoardSize = 7;
+                this.Komi = 6.5;
+                this.Rules = GameRules.JAPANESE;
+                this.Handicap = 0;
+                this.BlackName = "Sema";
+                this.WhiteName = "Whitegh";
+                this.Event = "";
+            }
+        }
+
+        class GoNode {
+            constructor(parent, board, move, order, color, blackCaptures, whiteCaptures) {
+                this.Parent = parent;
+                this.Children = [];
+                this.Board = board;
+                this.LatestMove = move;
+                this.NodeOrder = order;
+                this.LastMoveColor = color;
+                this.BlackCaptures = blackCaptures;
+                this.WhiteCaptures = whiteCaptures;
+            }
+        }
+
+        class Chain {
+            constructor() {
+                this.ChainMap = new Set(); // Изменено на Set по твоему коду
+                this.Dame = 0;
+                this.Color = PointColor.EMPTY;
+                this.StoneCount = 0;
+            }
+        }
+
+        class GoTree {
+            constructor(settings) {
+                this.GameSettings = settings;
+                const board = Array(settings.BoardSize * settings.BoardSize).fill(PointColor.EMPTY);
+                
+                this.Root = new GoNode(
+                    null, 
+                    board, 
+                    -1, 
+                    0, 
+                    PointColor.BLACK, // ПЕРВЫЙ ХОД ЧЁРНЫХ
+                    0, 
+                    0
+                );
+                
+                this.CurrentNode = this.Root;
+                this.Result = "";
+                this.Winner = "";
+                this.CreatedAt = new Date();
+            }
+
+            makeMove(move) {
+                // #1 Проверка на found among the children
+                for (let i = 0; i < this.CurrentNode.Children.length; i++) {
+                    const child = this.CurrentNode.Children[i];
+                    if (child.LatestMove === move) {
+                        this.CurrentNode = child;
+                        return null;
+                    }
+                }
+
+                // #2 Базовая валидация
+                if (move < 0 || move >= this.GameSettings.BoardSize * this.GameSettings.BoardSize) {
+                    return `Move ${move} out of board range`;
+                }
+                if (this.CurrentNode.Board[move] !== PointColor.EMPTY) {
+                    return `Point ${move} already occupied`;
+                }
+
+                // Создаем tempBoard с новым ходом
+                const tempBoard = [...this.CurrentNode.Board];
+                tempBoard[move] = this.oppositeColor(this.CurrentNode.LastMoveColor);
+
+                // Создаем полезные переменные
+                let totalCaptured = 0;
+                const capturedChains = [];
+                const neighbors = this.getNeighbors(move);
+                let enemyNeighborCount = 0;
+
+                // Создаем кэш для защиты от повторного прохождения чейнов
+                const chainCache = new Map();
+
+                // Для каждого соседнего-вражеского камня проверяем жизнь его группы
+                for (const neighbor of neighbors) {
+                    if (this.isEnemyStone(tempBoard[neighbor])) {
+                        enemyNeighborCount++;
+
+                        if (!chainCache.has(neighbor)) {
+                            const newChain = this.findChainAt(tempBoard, neighbor);
+
+                            // Кэшируем все камни цепи
+                            for (const pos of newChain.ChainMap) {
+                                chainCache.set(pos, newChain);
+                            }
+                        }
+
+                        const chain = chainCache.get(neighbor);
+                        if (chain && this.isChainDead(chain)) { 
+                            totalCaptured += chain.StoneCount;
+                            capturedChains.push(chain);
+                        }
+                    }
+                }
+
+                // #3 Проверка на Ко
+                // #4 Если больше totalCaptured > 1, то можно сделать ход
+                if (totalCaptured >= 1) {
+                    if (totalCaptured === 1 && this.CurrentNode.Parent && 
+                        this.CurrentNode.Parent.Board[move] === this.CurrentNode.Parent.LastMoveColor && enemyNeighborCount === 4) {
+                        return "Ko violation";
+                    }
+                } else {
+                    // #5 Проверка на самоубийственный ход
+                    const myChain = this.findChainAt(tempBoard, move);
+                    if (myChain && this.isChainDead(myChain)) {
+                        return "Suicide move not allowed";
+                    }
+                }
+
+                // УРА ВЫ ПРОШЛИ ПРОВЕРКИ!
+                this.removeCapturedStones(tempBoard, capturedChains);
+
+                // Добавляем количество пленников
+                let blackCaptures = this.CurrentNode.BlackCaptures;
+                let whiteCaptures = this.CurrentNode.WhiteCaptures;
+                
+                if (this.CurrentNode.LastMoveColor === PointColor.WHITE) {
+                    whiteCaptures += totalCaptured;
+                } else {
+                    blackCaptures += totalCaptured;
+                }
+
+                // Новый узел
+                const newNode = new GoNode(
+                    this.CurrentNode,
+                    tempBoard,
+                    move,
+                    this.CurrentNode.NodeOrder + 1,
+                    this.oppositeColor(this.CurrentNode.LastMoveColor),
+                    blackCaptures,
+                    whiteCaptures
+                );
+
+                // Добавляем узел в Children
+                this.CurrentNode.Children.push(newNode);
+
+                // Переходим на новый узел
+                this.CurrentNode = newNode;
+                return null;
+            }
+
+            oppositeColor(color) {
+                if (color === PointColor.BLACK) return PointColor.WHITE;
+                if (color === PointColor.WHITE) return PointColor.BLACK;
+                return PointColor.EMPTY;
+            }
+
+            removeCapturedStones(board, capturedChains) {
+                for (const chain of capturedChains) {
+                    for (const pos of chain.ChainMap) {
+                        board[pos] = PointColor.EMPTY;
+                    }
+                }
+            }
+
+            isEnemyStone(color) {
+                if (color === PointColor.EMPTY) return false;
+                return color !== this.oppositeColor(this.CurrentNode.LastMoveColor);
+            }
+
+            getNeighbors(pos) {
+                const neighbors = [];
+                const boardSize = this.GameSettings.BoardSize;
+                const row = Math.floor(pos / boardSize);
+                const col = pos % boardSize;
+                
+                if (row > 0) neighbors.push(pos - boardSize);
+                if (row < boardSize - 1) neighbors.push(pos + boardSize);
+                if (col > 0) neighbors.push(pos - 1);
+                if (col < boardSize - 1) neighbors.push(pos + 1);
+                
+                return neighbors;
+            }
+
+            findChainAt(board, startPos) {
+                if (board[startPos] === PointColor.EMPTY) {
+                    return null;
+                }
+
+                const chain = new Chain();
+                chain.Color = board[startPos];
+                
+                this.findConnectedStones(chain, board, startPos);
+                this.calculateDame(chain, board);
+                
+                return chain;
+            }
+
+            findConnectedStones(chain, board, startPos) {
+                const visited = new Set();
+                const queue = [startPos];
+                const boardSize = this.GameSettings.BoardSize;
+                
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    
+                    if (visited.has(current)) continue;
+                    visited.add(current);
+                    
+                    chain.ChainMap.add(current);
+                    chain.StoneCount++;
+                    
+                    const neighbors = this.getNeighbors(current);
+                    for (const neighbor of neighbors) {
+                        if (!visited.has(neighbor) && board[neighbor] === chain.Color) {
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+            }
+
+            calculateDame(chain, board) {
+                let dameCount = 0;
+                const visitedDame = new Set();
+                const boardSize = this.GameSettings.BoardSize;
+                
+                for (const pos of chain.ChainMap) {
+                    const neighbors = this.getNeighbors(pos);
+                    for (const neighbor of neighbors) {
+                        if (board[neighbor] === PointColor.EMPTY && !visitedDame.has(neighbor)) {
+                            dameCount++;
+                            visitedDame.add(neighbor);
+                        }
+                    }
+                }
+                
+                chain.Dame = dameCount;
+            }
+
+            isChainDead(chain) {
+                return chain.Dame === 0;
+            }
+
+            passTurn() {
+                const newNode = new GoNode(
+                    this.CurrentNode,
+                    [...this.CurrentNode.Board],
+                    -1,
+                    this.CurrentNode.NodeOrder + 1,
+                    this.oppositeColor(this.CurrentNode.LastMoveColor),
+                    this.CurrentNode.BlackCaptures,
+                    this.CurrentNode.WhiteCaptures
+                );
+
+                this.CurrentNode.Children.push(newNode);
+                this.CurrentNode = newNode;
+            }
+
+            undoMove() {
+                if (this.CurrentNode.Parent) {
+                    this.CurrentNode = this.CurrentNode.Parent;
+                    return true;
+                }
+                return false;
+            }
+
+            getCurrentBoard() {
+                return this.CurrentNode.Board;
+            }
+
+            getCurrentPlayer() {
+                return this.CurrentNode.LastMoveColor;
+            }
+
+            getCaptures() {
+                return {
+                    black: this.CurrentNode.BlackCaptures,
+                    white: this.CurrentNode.WhiteCaptures
+                };
+            }
+        }
+
+        // ИНИЦИАЛИЗАЦИЯ И ФРОНТЕНД
+        let gameTree;
+
+        function initGame() {
+            const settings = new GameSettings();
+            gameTree = new GoTree(settings);
+            createBoardUI();
+            updateUI();
+            
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+            }
+        }
+
+        function createBoardUI() {
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+            
+            const size = gameTree.GameSettings.BoardSize;
+            
+            for (let i = 0; i < size; i++) {
+                const hLine = document.createElement('div');
+                hLine.className = 'board-line horizontal-line';
+                hLine.style.top = `${i * (100 / (size - 1))}%`;
+                boardElement.appendChild(hLine);
+                
+                const vLine = document.createElement('div');
+                vLine.className = 'board-line vertical-line';
+                vLine.style.left = `${i * (100 / (size - 1))}%`;
+                boardElement.appendChild(vLine);
+            }
+            
+            for (let i = 0; i < size * size; i++) {
+                const intersection = document.createElement('div');
+                intersection.className = 'intersection';
+                
+                const col = i % size;
+                const row = Math.floor(i / size);
+                
+                const left = col * (100 / (size - 1));
+                const top = row * (100 / (size - 1));
+                
+                intersection.style.left = `${left}%`;
+                intersection.style.top = `${top}%`;
+                
+                intersection.addEventListener('click', () => {
+                    const error = gameTree.makeMove(i);
+                    if (error) {
+                        showMessage(error);
+                    } else {
+                        updateUI();
+                    }
+                });
+                
+                boardElement.appendChild(intersection);
+            }
+        }
+
+        function passTurn() {
+            gameTree.passTurn();
+            updateUI();
+            showMessage(`Пас! Ход ${gameTree.getCurrentPlayer() === PointColor.BLACK ? 'чёрных' : 'белых'}`);
+        }
+
+        function undoMove() {
+            if (gameTree.undoMove()) {
+                updateUI();
+            }
+        }
+
+        function newGame() {
+            initGame();
+        }
+
+        function updateUI() {
+            const board = gameTree.getCurrentBoard();
+            const currentPlayer = gameTree.getCurrentPlayer();
+            const captures = gameTree.getCaptures();
+            
+            const intersections = document.getElementsByClassName('intersection');
+            for (let i = 0; i < intersections.length; i++) {
+                intersections[i].innerHTML = '';
+                
+                if (board[i] === PointColor.BLACK) {
+                    const stone = document.createElement('div');
+                    stone.className = 'stone black-stone';
+                    intersections[i].appendChild(stone);
+                } else if (board[i] === PointColor.WHITE) {
+                    const stone = document.createElement('div');
+                    stone.className = 'stone white-stone';
+                    intersections[i].appendChild(stone);
+                }
+            }
+            
+            document.getElementById('black-captures').textContent = captures.black;
+            document.getElementById('white-captures').textContent = captures.white;
+            
+            document.getElementById('status').textContent = 
+                `Ход ${currentPlayer === PointColor.BLACK ? 'чёрных' : 'белых'}`;
+            document.getElementById('status').className = 'status';
+            
+            document.getElementById('black-info').classList.toggle('current-turn', 
+                currentPlayer === PointColor.BLACK);
+            document.getElementById('white-info').classList.toggle('current-turn', 
+                currentPlayer === PointColor.WHITE);
+        }
+
+        function showMessage(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status error';
+            
+            setTimeout(() => {
+                updateUI();
+            }, 2000);
+        }
+
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
