@@ -226,7 +226,7 @@
     </div>
 
     <script>
-        // ОБНОВЛЕННЫЕ СТРУКТУРЫ ПО ТВОЕМУ КОДУ
+        // СТРУКТУРЫ ПО ТВОЕМУ КОДУ
         const PointColor = {
             EMPTY: '.',
             BLACK: 'B', 
@@ -265,7 +265,7 @@
 
         class Chain {
             constructor() {
-                this.ChainMap = new Set(); // Изменено на Set по твоему коду
+                this.ChainMap = new Map(); // map[int]struct{}
                 this.Dame = 0;
                 this.Color = PointColor.EMPTY;
                 this.StoneCount = 0;
@@ -282,7 +282,7 @@
                     board, 
                     -1, 
                     0, 
-                    PointColor.BLACK, // ПЕРВЫЙ ХОД ЧЁРНЫХ
+                    PointColor.BLACK,
                     0, 
                     0
                 );
@@ -311,7 +311,7 @@
                     return `Point ${move} already occupied`;
                 }
 
-                // Создаем tempBoard с новым ходом
+                // Для проверки хода создаем tempBoard с новым ходом
                 const tempBoard = [...this.CurrentNode.Board];
                 tempBoard[move] = this.oppositeColor(this.CurrentNode.LastMoveColor);
 
@@ -321,32 +321,33 @@
                 const neighbors = this.getNeighbors(move);
                 let enemyNeighborCount = 0;
 
-                // Создаем кэш для защиты от повторного прохождения чейнов
+                // Создаем кэш для защиты от повторного прохождения чейнов при обходе соседей
                 const chainCache = new Map();
 
-                // Для каждого соседнего-вражеского камня проверяем жизнь его группы
+                // Для каждого соседнего-вражеского камня проверяем жизнь его группы 
                 for (const neighbor of neighbors) {
                     if (this.isEnemyStone(tempBoard[neighbor])) {
                         enemyNeighborCount++;
 
-                        if (!chainCache.has(neighbor)) {
-                            const newChain = this.findChainAt(tempBoard, neighbor);
+                        if (chainCache.has(neighbor)) {
+                            continue;
+                        }
+                        
+                        const newChain = this.findChainAt(tempBoard, neighbor);
 
-                            // Кэшируем все камни цепи
-                            for (const pos of newChain.ChainMap) {
-                                chainCache.set(pos, newChain);
-                            }
+                        // Кэшируем камни цепи (обновление кэша)
+                        for (const pos of newChain.ChainMap.keys()) {
+                            chainCache.set(pos, newChain);
                         }
 
-                        const chain = chainCache.get(neighbor);
-                        if (chain && this.isChainDead(chain)) { 
-                            totalCaptured += chain.StoneCount;
-                            capturedChains.push(chain);
+                        if (this.isChainDead(newChain)) { 
+                            totalCaptured += newChain.StoneCount;
+                            capturedChains.push(newChain);
                         }
                     }
                 }
 
-                // #3 Проверка на Ко
+                // #3 Проверка на Ко (подходит ко всем правилам)
                 // #4 Если больше totalCaptured > 1, то можно сделать ход
                 if (totalCaptured >= 1) {
                     if (totalCaptured === 1 && this.CurrentNode.Parent && 
@@ -356,12 +357,12 @@
                 } else {
                     // #5 Проверка на самоубийственный ход
                     const myChain = this.findChainAt(tempBoard, move);
-                    if (myChain && this.isChainDead(myChain)) {
+                    if (this.isChainDead(myChain)) {
                         return "Suicide move not allowed";
                     }
                 }
 
-                // УРА ВЫ ПРОШЛИ ПРОВЕРКИ!
+                // УРА ВЫ ПРОШЛИ ПРОВЕРКИ! и теперь tempBoard будет следующим
                 this.removeCapturedStones(tempBoard, capturedChains);
 
                 // Добавляем количество пленников
@@ -385,7 +386,7 @@
                     whiteCaptures
                 );
 
-                // Добавляем узел в Children
+                // Добавляем узел в GoTree
                 this.CurrentNode.Children.push(newNode);
 
                 // Переходим на новый узел
@@ -401,7 +402,7 @@
 
             removeCapturedStones(board, capturedChains) {
                 for (const chain of capturedChains) {
-                    for (const pos of chain.ChainMap) {
+                    for (const pos of chain.ChainMap.keys()) {
                         board[pos] = PointColor.EMPTY;
                     }
                 }
@@ -441,17 +442,16 @@
             }
 
             findConnectedStones(chain, board, startPos) {
-                const visited = new Set();
+                const visited = new Map();
                 const queue = [startPos];
-                const boardSize = this.GameSettings.BoardSize;
                 
                 while (queue.length > 0) {
                     const current = queue.shift();
                     
                     if (visited.has(current)) continue;
-                    visited.add(current);
+                    visited.set(current, true);
                     
-                    chain.ChainMap.add(current);
+                    chain.ChainMap.set(current, null);
                     chain.StoneCount++;
                     
                     const neighbors = this.getNeighbors(current);
@@ -465,15 +465,14 @@
 
             calculateDame(chain, board) {
                 let dameCount = 0;
-                const visitedDame = new Set();
-                const boardSize = this.GameSettings.BoardSize;
+                const visitedDame = new Map();
                 
-                for (const pos of chain.ChainMap) {
+                for (const pos of chain.ChainMap.keys()) {
                     const neighbors = this.getNeighbors(pos);
                     for (const neighbor of neighbors) {
                         if (board[neighbor] === PointColor.EMPTY && !visitedDame.has(neighbor)) {
                             dameCount++;
-                            visitedDame.add(neighbor);
+                            visitedDame.set(neighbor, true);
                         }
                     }
                 }
